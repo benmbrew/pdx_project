@@ -1,0 +1,4 @@
+1) get_lung -> this will read in lung data and make a dasl data set and a full data set (dasl + hybrid). Each one is scaled (but can also log2 and quantile normalize. 
+2) get_novartis -> read in novartis and scale
+3) get_batch -> combine dasl and full with novartis and correct for different technologies.
+3) get_pred -> this will build model on novartis data and predict on lung data.
