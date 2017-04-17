@@ -4,6 +4,7 @@
 ##########
 # initialize libraries
 ##########
+library(plyr)
 library(dplyr)
 library(lumi)
 
@@ -45,7 +46,7 @@ mod_summary <- read.csv(paste0(champ_onc_folder, '/mod_overview.csv'), stringsAs
 s3_files <- read.csv(paste0(champ_onc_folder, '/s3_files.csv'), stringsAsFactors = F)
 
 ##########
-# explore mod_summary and s3_files 
+# explore mod_summary
 ##########
 
 length(unique(mod_summary$Model))
@@ -96,6 +97,11 @@ mod_summary %>% group_by(RNA.seq.status) %>% summarise(counts = n())
 mod_summary %>% group_by(Characterization) %>% summarise(counts = n())
 # 522 available, 449 blank (NA)
 
+# recode mod_summary colnames
+colnames(mod_summary) <- tolower(colnames(mod_summary))
+colnames(mod_summary) <- gsub('.', '_', colnames(mod_summary), fixed = T)
+colnames(mod_summary)[1] <- 'model_id'
+
 ##########
 # look at rna file and get to model by gene format
 ##########
@@ -133,5 +139,77 @@ temp <- rna_sig_by_gene %>% group_by(model_id) %>% summarise(counts = n())
 mean(temp$counts)
 # on avg each model has only 16 genes
 
+model <- 'CTG-0011'
 # put in wide format(maybe use loop)
+result_list <- list()
+for(model in unique(rna_sig_by_gene$model_id)){
+  
+  sub_dat <- as.data.frame(t(rna_sig_by_gene[rna_sig_by_gene$model_id == model,]), stringsAsFactors = F)
+  sub_dat$model_id <- unique(sub_dat[1,1])
+  colnames(sub_dat) <- sub_dat[2,] 
+  result_list[[model]] <- sub_dat[-c(1:2),]
+  print(model)
+  
+}
+
+# what is the minimun
+temp <- lapply(result_list, function(x) unlist(colnames(x)))
+
+# histogram of gene counts for each model. 
+hist(unlist(lapply(temp, function(x) length(x))), breaks = 20)
+
+# how many models have over 20 genes
+length(which(unlist(lapply(temp, function(x) length(x))) > 5))
+
+# # create column in each sub data frame that indicates how many genes we have for that model
+# length(result_list) 
+# for(model in 1:length(result_list)) {
+#   sub_dat <- result_list[[model]]
+#   sub_dat$num_genes <- (length(colnames(sub_dat)) - 1)
+#   result_list[[model]] <- sub_dat
+#   print(model)
+# }
+
+##########
+# collapse data
+##########
+
+# first make last column for model_id in each data frame 
+for(i in 1:length(result_list)) {
+  sub_dat <- result_list[[i]]
+  colnames(sub_dat)[length(sub_dat)] <- 'model_id'
+  feats <- colnames(sub_dat)[(1:length(colnames(sub_dat))- 1)]
+  sub_dat <- sub_dat[, c('model_id', feats)]
+  result_list[[i]] <- sub_dat
+  print(i)
+}
+
+rna_data <- rbind.fill(result_list)
+
+###########
+# we now have a data frame with 511 unique models and 195 unique genes
+###########
+
+# avg amount of missing values per gene 
+mean(apply(rna_data[, 2:ncol(rna_data)], 2,function(x) length(which(!is.na(x)))))
+
+# # get gene names and corresponding counts 
+# temp_counts <- as.data.frame(apply(rna_data[, 2:ncol(rna_data)], 2,function(x) length(which(!is.na(x)))))
+# colnames(temp_counts) <- 'counts'
+# temp_counts$gene <- rownames(temp_counts)
+# temp_counts <- temp_counts[order(temp_counts$counts, decreasing = T),]
+
+##########
+# merge mod_summary with rna_data, and then merge that with treatment (has outcome)
+##########
+rna_mod <- left_join(treatment, rna_data, by = c('model_id' = 'model_id'))
+
+# subset to "Responded" and "No response"
+rna_mod <- rna_mod[grepl('No response|Responded', rna_mod$outcome),]
+
+###########
+# save rna_mod
+###########
+saveRDS(rna_mod, paste0(champ_onc_folder, '/rna_mod.rda'))
+
 
