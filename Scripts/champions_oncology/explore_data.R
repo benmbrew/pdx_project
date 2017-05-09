@@ -7,6 +7,8 @@
 library(plyr)
 library(dplyr)
 library(lumi)
+library(plotly)
+
 
 ##########
 # initiate folder
@@ -38,6 +40,8 @@ mut <- read.csv(paste0(champ_onc_folder, '/mutations_export.csv'), stringsAsFact
 
 # treatment_history
 treatment <- read.csv(paste0(champ_onc_folder, '/treatment_history.csv'), stringsAsFactors = F)
+# length(unique(treatment$treatment))
+# 350 unique treatments
 
 # readin model overview
 mod_summary <- read.csv(paste0(champ_onc_folder, '/mod_overview.csv'), stringsAsFactors = F)
@@ -211,5 +215,48 @@ rna_mod <- rna_mod[grepl('No response|Responded', rna_mod$outcome),]
 # save rna_mod
 ###########
 saveRDS(rna_mod, paste0(champ_onc_folder, '/rna_mod.rda'))
+
+###########
+# visualize rna_mod
+###########
+
+# if NA put zero, else 1
+rna_mod[, 6:ncol(rna_mod)][!is.na(rna_mod[, 6:ncol(rna_mod)])] <- 1
+rna_mod[, 6:ncol(rna_mod)][is.na(rna_mod[, 6:ncol(rna_mod)])] <- 0
+
+# put model id in rownames and grab all genes
+genes <- colnames(rna_mod)[6:ncol(rna_mod)]
+
+# get genes and id
+mod <- rna_mod[, c('model_id', genes)]
+mod[, 2:ncol(mod)] <- apply(mod[, 2:ncol(mod)], 2, function(x) as.numeric(x))
+
+
+# remove dups
+mod_dedup <- mod[!duplicated(mod$model_id),]
+
+
+geom_raster(aes(fill = value)) +
+  scale_fill_grey(name = "",
+                  labels = c("Present","Missing")) +
+  theme_minimal() + 
+  theme(axis.text.x  = element_text(angle=45, vjust=0.5)) + 
+  labs(x = "Variables in Dataset",
+       y = "Rows / observations")
+library(dplyr)
+library(wakefield)
+library(reshape2)
+
+
+
+
+rownames(mod_dedup) <- mod_dedup$model_id
+
+mod_dedup$model_id <- NULL
+
+# heatmap
+?heatmap
+# make numeric
+heatmap(as.matrix(mod_dedup), Rowv = NA, Colv = NA)
 
 

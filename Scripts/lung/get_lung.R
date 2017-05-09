@@ -15,7 +15,7 @@ library(sva)
 # initiate folder
 ##########
 home_folder <- '/home/benbrew/Documents/'
-project_folder <- paste0(home_folder, 'pdxSNF/')
+project_folder <- paste0(home_folder, 'pdx_project/')
 data_folder <- paste0(project_folder, 'Data/')
 micro_array_data <- paste0(data_folder, 'microarray/')
 code_folder <- paste0(project_folder, 'Code/')
@@ -37,14 +37,14 @@ id_map$array_label <- trimws(id_map$array_label, which = "both")
 datList <- list()
 directory <- dir(micro_array_data)
 
-for (folder in directory){
+for (folder in directory) {
   # read into list
   datList[[folder]] <- read.csv(paste0(micro_array_data , folder, '/sample_probe_nonnorm_FinalReport.csv'), stringsAsFactors = F)
   print(folder)
 }
 
 ##########
-# loop through data, clean, log2, normalize
+# loop through data, clean, log2, normalize - 8, 
 ##########
 for (dat in 1:length(datList)) {
   # get data from list
@@ -66,7 +66,7 @@ for (dat in 1:length(datList)) {
   data <- data[ , grepl('AVG|gene|STDERR|Pval', colnames(data))]
   
   # get ride of 'N' 'T'
-  data <- data[ , !grepl('N.AVG|N.BEAD|N.Detection|T.AVG|T.BEAD|T.Detection', colnames(data))]
+  data <- data[ , !grepl('N|T', colnames(data))]
   
   # transpose
   data <- as.data.frame(t(data), stringsAsFactors = F)
@@ -76,16 +76,18 @@ for (dat in 1:length(datList)) {
   # make numeric
   data[, 1:ncol(data)] <- apply(data[, 1:ncol(data)], 2, as.numeric)
   
-  for( i in seq(1, nrow(data), by=3) ) {
+  for( i in seq(2, nrow(data), by=2) ) {
     
-    temp.2 <- data[ i:(i+2), ] 
+    temp.2 <- data[ i:(i-1), ] 
     
     # subset by sig array
-    pval <- temp.2[3,]
-    pval_sig_ind <- pval < 0.05
+    thresh = 0.05
+    row_index = 1
+    pval <- temp.2[row_index,]
+    pval_sig_ind <- pval < thresh
     temp.3 <- temp.2[, pval_sig_ind]
 
-    data[ i:(i+2), ] <- temp.3
+    data[ i:(i-1), ] <- temp.3
     
     print(i)
     
@@ -100,8 +102,8 @@ for (dat in 1:length(datList)) {
   
   # normalize data
   data[, 2:ncol(data)] <- scale( data[, 2:ncol(data)])
-  
-  # # apply log2 
+  # 
+  # # apply log2
   # data[, 2:ncol(data)] <- log2(data[, 2:ncol(data)])
   # 
   # # transpose for normlization
@@ -132,9 +134,6 @@ for (dat in 1:length(datList)) {
 
 
 rm(pval, pval_sig_ind, temp.2, temp.3, data)
-
-save.image('/home/benbrew/Desktop/temp_lung.RData')
-# load('/home/benbrew/Desktop/temp_lung.RData')
 
 ### going forward
 # two data sets - dasl and all together
@@ -217,39 +216,41 @@ data_full <- do.call(rbind, data_list_full)
 
 data_dasl <- do.call(rbind, data_list_dasl)
 
-
 ##########
 # get gene avg
 ##########
 getGene <- function(data, full) 
 {
   
+  # remove duplicates
+  data <- data[!duplicated(data$model_id),]
+  rownames(data) <- data$model_id
   # transpose data
   data <- as.data.frame(t(data), stringsAsFactors = F)
   
+  # remove first row
+  data <- data[-1,]
+  
   # keep only signal1 column
   data <- data[, grepl('_Signal', colnames(data))]
-  
-  # get features 
-  features <- colnames(data)
   
   # make gene a column
   data$gene <- rownames(data)
   
   # remove every .*
-  new_gene <- strsplit(data$gene, '.', fixed = T)
+  new_gene <- strsplit(rownames(data), '.', fixed = T)
   data$gene <- as.character(lapply(new_gene, function(x) x[1]))
+  
+  # remove duplicates in gene
+  data <- data[!duplicated(data$gene),]
+  data$gene <- NULL
 
-  dat_group <- data %>% 
-    group_by(gene) %>%
-    summarise_each(funs(mean))
+  # dat_group <- data %>% 
+  #   group_by(gene) %>%
+  #   summarise_each(funs(mean))
   
   # transpose again
-  data <- as.data.frame(t(dat_group), stringsAsFactors = F)
-  
-  # make first rown colnames and remove
-  colnames(data) <- as.character(data[1,])
-  data <- data[-1,]
+  data <- as.data.frame(t(data), stringsAsFactors = F)
   
   # make column for id 
   data$id <- rownames(data)
@@ -268,6 +269,9 @@ getGene <- function(data, full)
 
 data_dasl <- getGene(data_dasl)
 data_full <- getGene(data_full)
+
+# save.image('/home/benbrew/Desktop/lung_ming.RData')
+# load('/home/benbrew/Desktop/lung_ming.RData')
 
 #########
 # create new colum in id_map that can join both dasl and hybrid
@@ -299,6 +303,7 @@ data_full <- cleanMap(data_full)
 #########
 # drop duplicates
 #########
+# data <- data_full
 treatDups <- function(data, full)
 {
   
@@ -347,15 +352,21 @@ treatDups <- function(data, full)
 
 data_dasl <- treatDups(data_dasl, full = F)
 data_full <- treatDups(data_full, full = T)
+ 
+# length of unique models
+length(unique(data_dasl$model_id))
+length(unique(data_full$model_id))
 
-
-
-# 
+# avg number of passage per model 
+summary(as.factor(data_full$passage))
+mean(as.numeric(data_full$passage), na.rm = T)
 
 ##########
 # pca 
 ##########
-
+# pca_data <- data_full
+# column_name <- 'project_title'
+# gene_start = 4
 getPCA <- function(pca_data, 
                    column_name, 
                    gene_start, 
@@ -374,6 +385,10 @@ getPCA <- function(pca_data,
   
   # make data numeric 
   pca <- prcomp(pca_data[,2:ncol(pca_data)])
+  min(pca$x[,2])
+  pca$x[,2][pca$x[,2] < -40]
+  pca$x[,2] < -40
+  
   
   # plot data
   #fill in factors with colors 
@@ -392,6 +407,8 @@ getPCA <- function(pca_data,
                pca$x[,2],
                xlab = 'pca 1',
                ylab = 'pca 2',
+               xlim = c(-100, 100),
+               ylim = c(-100, 100),
                cex = 1,
                main = name,
                pch = 16,
@@ -405,118 +422,131 @@ getPCA <- function(pca_data,
 getPCA(data_full, 'project_title', 4, 'full data', full = T)
 getPCA(data_dasl, 'project_title', 4, 'dasl data', full = F)
 
-
 ##########
-# batch 
+# find and remove outliers
 ##########
-getCombat <- function(data, full)
-{
-  
-  if (full) {
-    data$project_title <- ifelse(data$project_title == 'a', 'a', 'b')
-    
-    dup_index <- duplicated(data$model_id)
-    data$model_id[dup_index] <- paste0(data$model_id[dup_index], '_dup')
-    
-    dup_index <- duplicated(data$model_id)
-    data$model_id[dup_index] <- paste0(data$model_id[dup_index], '_dup2')
-    
-    dup_index <- duplicated(data$model_id)
-    data$model_id[dup_index] <- paste0(data$model_id[dup_index], '_dup3')
-    
-    dup_index <- duplicated(data$model_id)
-    data$model_id[dup_index] <- paste0(data$model_id[dup_index], '_dup4')
-    
-    dup_index <- duplicated(data$model_id)
-    data$model_id[dup_index] <- paste0(data$model_id[dup_index], '_dup5')
-    
-  } else {
-    # add unique indicator to duplicated model ids - multiple duplicates - this will do for now
-    dup_index <- duplicated(data$model_id)
-    data$model_id[dup_index] <- paste0(data$model_id[dup_index], '_dup')
-  }
- 
-  
-  # get passage to combine later
-  passage <- data$passage
-  
-  # put model model_ids in rownames and remove columns
-  rownames(data) <- data$model_id
-  mat_data <- data[, 4:ncol(data)]
-  # get features 
-  features <- colnames(mat_data)
-  mat_data <- t(mat_data)
-  
-  # # full
-  # if(full) {
-  #   data$batch <- ifelse(data$)
-  # }
-  
-  # get intercept
-  modcombat <- model.matrix(~1, data = data)
-  batch <- as.factor(data$project_title)
-  combat <- ComBat(dat = mat_data, batch = batch, mod = modcombat, par.prior=TRUE, prior.plots=FALSE)
-  
-  # transpose and add back columns
-  final_dat <- as.data.frame(t(combat))
-  final_dat$model_id <- rownames(final_dat)
-  final_dat$project_title <- batch
-  final_dat$passage <- passage
-  final_dat <- final_dat[, c('model_id', 'passage', 'project_title', features)]
-  final_dat$project_title <- as.character(final_dat$project_title)
-  rownames(final_dat) <- NULL
-  
-  return(final_dat)
-  
-}
+# 21 and 58 
+data_full <- data_full[!grepl('139|200', data_full$model_id),]
 
-data_dasl <- getCombat(data_dasl, full = F)
-
-getPCA(data_dasl, 'project_title', 4, 'dasl data', full = F)
+data_dasl <- data_dasl[!grepl('139|200', data_dasl$model_id),]
 
 
-#########
-# put new batch corrected dasl into full data
-#########
 
-getFull <- function(dasl, full) 
-{
-  # sort each by project_title (batch)
-  dasl <- dasl[order(dasl$project_title, decreasing = F),]
-  full <- full[order(full$project_title, decreasing = F),]
-  
-  # get overlapping intersection
-  int_feat <- Reduce(intersect, list(colnames(dasl), colnames(full)))
-  
-  # subset both 
-  dasl <- dasl[, int_feat]
-  full <- full[, int_feat]
-  
-  # check to see if dasl is same in both
-  stopifnot(all(dasl$project_title  == full$project_title[full$project_title != 'a']))
-  
-  # put dasl in where project_title is not a
-  full[full$project_title != 'a',] <- dasl
-  
-  return(full)
-  
-}
 
-data_full <- getFull(data_dasl, data_full)
 
-#########
-# apply combat to full data with 
-#########
-
-# first pca
-getPCA(data_full, 'project_title',4, 'full data, dasl corrected', full = T)
-
-# apply combat
-data_full <- getCombat(data_full, full = T)
-
-# get pca again
-getPCA(data_full, 'project_title',4, 'full data, dasl corrected', full = T)
-
+# 
+# # not sure if we need to batch correct
+# ##########
+# # batch 
+# ##########
+# getCombat <- function(data, full)
+# {
+#   
+#   if (full) {
+#     data$project_title <- ifelse(data$project_title == 'a', 'a', 'b')
+#     
+#     dup_index <- duplicated(data$model_id)
+#     data$model_id[dup_index] <- paste0(data$model_id[dup_index], '_dup')
+#     
+#     dup_index <- duplicated(data$model_id)
+#     data$model_id[dup_index] <- paste0(data$model_id[dup_index], '_dup2')
+#     
+#     dup_index <- duplicated(data$model_id)
+#     data$model_id[dup_index] <- paste0(data$model_id[dup_index], '_dup3')
+#     
+#     dup_index <- duplicated(data$model_id)
+#     data$model_id[dup_index] <- paste0(data$model_id[dup_index], '_dup4')
+#     
+#     dup_index <- duplicated(data$model_id)
+#     data$model_id[dup_index] <- paste0(data$model_id[dup_index], '_dup5')
+#     
+#   } else {
+#     # add unique indicator to duplicated model ids - multiple duplicates - this will do for now
+#     dup_index <- duplicated(data$model_id)
+#     data$model_id[dup_index] <- paste0(data$model_id[dup_index], '_dup')
+#   }
+#  
+#   
+#   # get passage to combine later
+#   passage <- data$passage
+#   
+#   # put model model_ids in rownames and remove columns
+#   rownames(data) <- data$model_id
+#   mat_data <- data[, 4:ncol(data)]
+#   # get features 
+#   features <- colnames(mat_data)
+#   mat_data <- t(mat_data)
+#   
+#   # # full
+#   # if(full) {
+#   #   data$batch <- ifelse(data$)
+#   # }
+#   
+#   # get intercept
+#   modcombat <- model.matrix(~1, data = data)
+#   batch <- as.factor(data$project_title)
+#   combat <- ComBat(dat = mat_data, batch = batch, mod = modcombat, par.prior=TRUE, prior.plots=FALSE)
+#   
+#   # transpose and add back columns
+#   final_dat <- as.data.frame(t(combat))
+#   final_dat$model_id <- rownames(final_dat)
+#   final_dat$project_title <- batch
+#   final_dat$passage <- passage
+#   final_dat <- final_dat[, c('model_id', 'passage', 'project_title', features)]
+#   final_dat$project_title <- as.character(final_dat$project_title)
+#   rownames(final_dat) <- NULL
+#   
+#   return(final_dat)
+#   
+# }
+# 
+# data_dasl <- getCombat(data_dasl, full = F)
+# 
+# getPCA(data_dasl, 'project_title', 4, 'dasl data', full = F)
+# 
+# 
+# #########
+# # put new batch corrected dasl into full data
+# #########
+# 
+# getFull <- function(dasl, full) 
+# {
+#   # sort each by project_title (batch)
+#   dasl <- dasl[order(dasl$project_title, decreasing = F),]
+#   full <- full[order(full$project_title, decreasing = F),]
+#   
+#   # get overlapping intersection
+#   int_feat <- Reduce(intersect, list(colnames(dasl), colnames(full)))
+#   
+#   # subset both 
+#   dasl <- dasl[, int_feat]
+#   full <- full[, int_feat]
+#   
+#   # check to see if dasl is same in both
+#   stopifnot(all(dasl$project_title  == full$project_title[full$project_title != 'a']))
+#   
+#   # put dasl in where project_title is not a
+#   full[full$project_title != 'a',] <- dasl
+#   
+#   return(full)
+#   
+# }
+# 
+# data_full <- getFull(data_dasl, data_full)
+# 
+# #########
+# # apply combat to full data with 
+# #########
+# 
+# # first pca
+# getPCA(data_full, 'project_title',4, 'full data, dasl corrected', full = T)
+# 
+# # apply combat
+# data_full <- getCombat(data_full, full = T)
+# 
+# # get pca again
+# getPCA(data_full, 'project_title',4, 'full data, dasl corrected', full = T)
+# 
 
 #########
 # save both data sets

@@ -15,7 +15,7 @@ library(sva)
 # initiate folder
 ##########
 home_folder <- '/home/benbrew/Documents/'
-project_folder <- paste0(home_folder, 'pdxSNF/')
+project_folder <- paste0(home_folder, 'pdx_project/')
 data_folder <- paste0(project_folder, 'Data/')
 micro_array_data <- paste0(data_folder, 'microarray/')
 code_folder <- paste0(project_folder, 'Code/')
@@ -23,7 +23,7 @@ code_folder <- paste0(project_folder, 'Code/')
 ##########
 # read in novartis
 ##########
-nov <- readRDS(paste0(data_folder, '/rna_normalized.rda'))
+nov <- readRDS(paste0(data_folder, 'nov_dat_scaled.rda'))
 
 nov <- as.data.frame(nov, stringsAsFactors= F)
 
@@ -37,13 +37,14 @@ data_dasl <- readRDS(paste0(data_folder, '/data_dasl.rds'))
 # correct for batch between lung and novartis
 ##########
 
-# get common features 
-
+# # get common features 
+# data <- data_dasl
+# novartis_data <- nov
 commonFeat <- function(data, novartis_data) 
 {
   # get common features
   features <- colnames(data)[4:ncol(data)]
-  novartis_features <- colnames(novartis_data)[1:ncol(novartis_data)]
+  novartis_features <- colnames(novartis_data)[7:ncol(novartis_data)]
   intersect_feat <- intersect(features, novartis_features)
   
   # fix lumi, subset
@@ -53,7 +54,7 @@ commonFeat <- function(data, novartis_data)
   data <- data[, c('id', intersect_feat)]
   
   # fix novartis, subset
-  novartis_data$id <- rownames(novartis_data)
+  novartis_data$id <- novartis_data$patient.id
   novartis_data <- novartis_data[, c('id', intersect_feat)]
   
   full_data <- rbind(data, novartis_data)
@@ -78,8 +79,13 @@ data_full <- data_full[, c('id', 'batch', features)]
 data_dasl <- data_dasl[, c('id', 'batch', features)]
 
 
+
 # pca 
 
+# pca_data <- data_full
+# column_name = 'batch'
+# gene_start = 3
+# name = 't'
 getPCA <- function(pca_data, column_name, gene_start, name) 
 {
   # get features sites
@@ -117,16 +123,30 @@ getPCA <- function(pca_data, column_name, gene_start, name)
   
 }
 
-getPCA(data_full, 'batch', 3, 'full data')
+getPCA(data_full, 'batch', 3, 'Novartis and Mings Data Together')
 getPCA(data_dasl, 'batch', 3, 'dasl data')
 
+##########
+# explore difference in ming and novartis
+##########
 
+
+
+##########
+# scale data
+##########
+data_dasl[, 3:ncol(data_dasl)] <- scale(data_dasl[, 3:ncol(data_dasl)] )
+data_full[, 3:ncol(data_full)] <- scale(data_full[, 3:ncol(data_full)] )
+
+
+
+##########
 # batch 
+##########
 getCombat <- function(data)
 {
   
-  
-  
+  data$id <- make.names(data$id, unique=TRUE)
   # put model model_ids in rownames and remove columns
   rownames(data) <- data$id
   mat_data <- data[, 3:ncol(data)]
