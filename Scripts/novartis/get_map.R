@@ -141,7 +141,7 @@ rna_full <- rna_full[, c('model.id', 'biobase.id', 'tumor.type', 'patient.id', i
 ##########
 
 gene_model <- list()
-gene_control_result <- list()
+gene_micro_result <- list()
 
 # changed control into original, change rna into micro
 for(i in 5:ncol(rna_scaled)) {
@@ -151,7 +151,10 @@ for(i in 5:ncol(rna_scaled)) {
   model_data <- data.frame(rna = rna, micro = micro)
   names(model_data) <- c('rna', 'micro')
   gene_model[[i]] <- lm(micro ~ rna, data = model_data)
-  
+  rna <- as.numeric(rna_full[,i])
+  model_data_new <- data.frame(rna = rna)
+  names(model_data_new) <- 'rna'
+  gene_micro_result[[i]] <- predict(gene_model[[i]], newdata = model_data_new, type = 'response')
   print(i)
   
 }
@@ -160,16 +163,25 @@ for(i in 5:ncol(rna_scaled)) {
 # now loop throgh rna_full
 
 # # transpose results
-# temp <- do.call(rbind, gene_control_result)
-# transform_controls <- t(temp)
-# 
-# # add cg sites
-# colnames(transform_controls) <- colnames(beta_overlap[3:ncol(beta_overlap)])
-# 
-# # add clinical variables
-# transform_controls <- as.data.frame(cbind(id = beta_overlap$id, 
-#                                           age_sample_collection = beta_overlap$age_sample_collection, 
-#                                           transform_controls))
+temp <- do.call(rbind, gene_micro_result)
+transform_micro <- t(temp)
 
+# add cg sites
+colnames(transform_micro) <- colnames(rna_full[5:ncol(rna_full)])
+
+# # add clinical variables
+transform_micro <- as.data.frame(cbind(id = rna_full$model.id,
+                                    patient.id = rna_full$patient.id,
+                                    transform_micro), stringsAsFactors = F)
+
+##########
+# make numeric
+##########
+transform_micro[, 3:ncol(transform_micro)] <- apply(transform_micro[, 3:ncol(transform_micro)], 2, as.numeric)
+
+##########
+# save transfomed micro 
+##########
+saveRDS(transform_micro, paste0(data_folder, 'nov_micro_transformed.rda'))
 
 

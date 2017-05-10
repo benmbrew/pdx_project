@@ -23,7 +23,7 @@ code_folder <- paste0(project_folder, 'Code/')
 ##########
 # read in novartis
 ##########
-nov <- readRDS(paste0(data_folder, 'nov_dat_scaled.rda'))
+nov <- readRDS(paste0(data_folder, 'nov_micro_transformed.rda'))
 
 nov <- as.data.frame(nov, stringsAsFactors= F)
 
@@ -44,7 +44,7 @@ commonFeat <- function(data, novartis_data)
 {
   # get common features
   features <- colnames(data)[4:ncol(data)]
-  novartis_features <- colnames(novartis_data)[7:ncol(novartis_data)]
+  novartis_features <- colnames(novartis_data)[3:ncol(novartis_data)]
   intersect_feat <- intersect(features, novartis_features)
   
   # fix lumi, subset
